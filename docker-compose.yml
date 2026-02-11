@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  speech-core:
+    build:
+      context: ./speech-core
+      dockerfile: Dockerfile
+    container_name: openclaw-speech-core
+    ports:
+      - "9001:9001"
+    environment:
+      - SPEECH_CORE_HOST=0.0.0.0
+      - SPEECH_CORE_PORT=9001
+      - STT_ENGINE=faster-whisper
+      - STT_MODEL=base
+      - STT_DEVICE=auto
+      - STT_COMPUTE_TYPE=auto
+      - TTS_ENGINE=piper
+      - TTS_VOICE=zh_CN-huayan-medium
+      - VAD_THRESHOLD=0.5
+      - LOG_LEVEL=INFO
+    volumes:
+      # 模型缓存持久化
+      - speech-models:/root/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import asyncio, websockets; asyncio.run(websockets.connect('ws://localhost:9001/speech').__aenter__())"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # GPU 支持（需要 nvidia-docker）
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  speech-models:
+    driver: local

@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+gateway-plugins/*/dist/
+gateway-plugins/*/*.js
+gateway-plugins/*/*.d.ts
+gateway-plugins/*/*.js.map
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (large files)
+models/
+*.bin
+*.pt
+*.onnx
+!speech-core/speech_core/vad/silero_vad.onnx
+
+# Audio fixtures (keep small test files)
+*.wav
+*.mp3
+*.ogg
+!speech-core/tests/fixtures/audio/*.wav
+
+# Docker
+.docker/
+
+# Logs
+*.log
+logs/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
