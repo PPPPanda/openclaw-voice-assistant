@@ -1,0 +1,51 @@
+{
+  "id": "speech-core",
+  "name": "Speech Core",
+  "version": "0.1.0",
+  "description": "Speech Core RPC client for OpenClaw - provides STT/TTS/VAD capabilities via WebSocket connection to Speech Core service",
+  "author": "OpenClaw Voice Assistant Team",
+  "license": "MIT",
+  "entry": "./dist/index.js",
+  "kind": "general",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "endpoint": {
+        "type": "string",
+        "default": "ws://localhost:9001/speech",
+        "description": "Speech Core WebSocket endpoint"
+      },
+      "reconnectIntervalMs": {
+        "type": "number",
+        "default": 3000,
+        "description": "Reconnection interval in milliseconds"
+      },
+      "maxReconnectAttempts": {
+        "type": "number",
+        "default": 10,
+        "description": "Maximum reconnection attempts"
+      },
+      "healthCheckIntervalMs": {
+        "type": "number",
+        "default": 30000,
+        "description": "Health check interval in milliseconds"
+      }
+    }
+  },
+  "uiHints": {
+    "endpoint": {
+      "label": "Speech Core Endpoint",
+      "placeholder": "ws://localhost:9001/speech"
+    },
+    "reconnectIntervalMs": {
+      "label": "Reconnect Interval (ms)"
+    },
+    "maxReconnectAttempts": {
+      "label": "Max Reconnect Attempts"
+    },
+    "healthCheckIntervalMs": {
+      "label": "Health Check Interval (ms)"
+    }
+  }
+}

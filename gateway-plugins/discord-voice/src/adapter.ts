@@ -100,7 +100,9 @@ export class DiscordVoiceAdapter extends EventEmitter {
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: guild.id,
-      adapterCreator: guild.voiceAdapterCreator,
+      // Type assertion to handle discord.js / @discordjs/voice version mismatch
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adapterCreator: guild.voiceAdapterCreator as any,
       selfDeaf: this.config.selfDeaf,
       selfMute: this.config.selfMute,
     });

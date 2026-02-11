@@ -128,14 +128,14 @@ export class SpeechCoreClient extends EventEmitter {
    * 语音转文字
    */
   async stt(params: STTRequest): Promise<STTResult> {
-    return this.call<STTResult>('speech.stt', params);
+    return this.call<STTResult>('speech.stt', params as unknown as Record<string, unknown>);
   }
 
   /**
    * 文字转语音
    */
   async tts(params: TTSRequest): Promise<TTSResult | TTSStreamResult> {
-    return this.call<TTSResult | TTSStreamResult>('speech.tts', params);
+    return this.call<TTSResult | TTSStreamResult>('speech.tts', params as unknown as Record<string, unknown>);
   }
 
   /**

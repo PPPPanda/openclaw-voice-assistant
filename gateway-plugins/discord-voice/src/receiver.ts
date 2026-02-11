@@ -5,8 +5,8 @@
  * 将其解码为 PCM 并提供给 Speech Core 处理。
  */
 
-import { OpusEncoder } from '@discordjs/opus';
 import { Transform, TransformCallback, Readable } from 'stream';
+import prism from 'prism-media';
 
 /**
  * Opus → PCM 解码 Transform 流
@@ -15,7 +15,7 @@ import { Transform, TransformCallback, Readable } from 'stream';
  * 此 Transform 将其解码为 PCM s16le，可选择重采样到 16kHz。
  */
 export class OpusToPCMStream extends Transform {
-  private encoder: OpusEncoder;
+  private decoder: prism.opus.Decoder;
   private targetSampleRate: number;
   private sourceSampleRate: number;
 
@@ -29,7 +29,11 @@ export class OpusToPCMStream extends Transform {
     this.targetSampleRate = options?.targetSampleRate ?? 16000;
     const channels = options?.channels ?? 1;
 
-    this.encoder = new OpusEncoder(this.sourceSampleRate, channels);
+    this.decoder = new prism.opus.Decoder({
+      rate: this.sourceSampleRate,
+      channels,
+      frameSize: 960, // 20ms at 48kHz
+    });
   }
 
   _transform(
@@ -39,7 +43,12 @@ export class OpusToPCMStream extends Transform {
   ): void {
     try {
       // 解码 Opus → PCM s16le
-      const pcm = this.encoder.decode(chunk);
+      const pcm = this.decoder.decode(chunk);
+
+      if (!pcm) {
+        callback();
+        return;
+      }
 
       // 如果需要重采样
       if (this.sourceSampleRate !== this.targetSampleRate) {
@@ -58,23 +67,24 @@ export class OpusToPCMStream extends Transform {
   /**
    * 简单的线性插值重采样
    *
-   * 从 48kHz 下采样到 16kHz（比率 3:1）
+   * 注意：这是一个基础实现，音质可能不如专业重采样库。
+   * 生产环境建议使用 FFmpeg 或 libsamplerate。
    */
-  private resample(pcmBuffer: Buffer): Buffer {
-    const ratio = this.sourceSampleRate / this.targetSampleRate;
-    const inputSamples = pcmBuffer.length / 2; // s16le = 2 bytes per sample
-    const outputSamples = Math.floor(inputSamples / ratio);
+  private resample(input: Buffer): Buffer {
+    const ratio = this.targetSampleRate / this.sourceSampleRate;
+    const inputSamples = input.length / 2; // s16le = 2 bytes per sample
+    const outputSamples = Math.floor(inputSamples * ratio);
     const output = Buffer.alloc(outputSamples * 2);
 
     for (let i = 0; i < outputSamples; i++) {
-      const srcIndex = i * ratio;
+      const srcIndex = i / ratio;
       const srcIndexFloor = Math.floor(srcIndex);
       const srcIndexCeil = Math.min(srcIndexFloor + 1, inputSamples - 1);
-      const frac = srcIndex - srcIndexFloor;
+      const t = srcIndex - srcIndexFloor;
 
-      const sample1 = pcmBuffer.readInt16LE(srcIndexFloor * 2);
-      const sample2 = pcmBuffer.readInt16LE(srcIndexCeil * 2);
-      const interpolated = Math.round(sample1 * (1 - frac) + sample2 * frac);
+      const sample1 = input.readInt16LE(srcIndexFloor * 2);
+      const sample2 = input.readInt16LE(srcIndexCeil * 2);
+      const interpolated = Math.round(sample1 * (1 - t) + sample2 * t);
 
       output.writeInt16LE(
         Math.max(-32768, Math.min(32767, interpolated)),
@@ -84,41 +94,48 @@ export class OpusToPCMStream extends Transform {
 
     return output;
   }
+
+  _flush(callback: TransformCallback): void {
+    callback();
+  }
 }
 
 /**
- * 创建一个将 Opus 流转换为 PCM 16kHz 的管道
+ * 创建 PCM 流的便捷函数
  */
 export function createPCMStream(
   opusStream: Readable,
   options?: {
     targetSampleRate?: number;
+    channels?: number;
   },
 ): Readable {
   const decoder = new OpusToPCMStream({
     sourceSampleRate: 48000,
     targetSampleRate: options?.targetSampleRate ?? 16000,
-    channels: 1,
+    channels: options?.channels ?? 1,
   });
 
   return opusStream.pipe(decoder);
 }
 
 /**
- * 将 PCM 流收集为 Buffer
+ * 收集 PCM 流的所有数据到一个 Buffer
  */
-export async function collectPCMBuffer(stream: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-
+export function collectPCMBuffer(pcmStream: Readable): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    stream.on('data', (chunk: Buffer) => {
+    const chunks: Buffer[] = [];
+
+    pcmStream.on('data', (chunk: Buffer) => {
       chunks.push(chunk);
     });
 
-    stream.on('end', () => {
+    pcmStream.on('end', () => {
       resolve(Buffer.concat(chunks));
     });
 
-    stream.on('error', reject);
+    pcmStream.on('error', (error: Error) => {
+      reject(error);
+    });
   });
 }

@@ -1,15 +1,42 @@
 {
   "name": "@openclaw/speech-core-plugin",
   "version": "0.1.0",
-  "description": "OpenClaw Gateway plugin - Speech Core RPC client",
+  "description": "OpenClaw Gateway plugin - Speech Core RPC client for STT/TTS/VAD",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint src/",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run build"
   },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "install": {
+      "npmSpec": "@openclaw/speech-core-plugin",
+      "defaultChoice": "npm"
+    }
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "speech",
+    "stt",
+    "tts",
+    "vad",
+    "whisper",
+    "piper"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PPPPanda/openclaw-voice-assistant.git",
+    "directory": "gateway-plugins/speech-core"
+  },
+  "bugs": {
+    "url": "https://github.com/PPPPanda/openclaw-voice-assistant/issues"
+  },
+  "homepage": "https://github.com/PPPPanda/openclaw-voice-assistant#readme",
   "dependencies": {
     "ws": "^8.16.0",
     "uuid": "^9.0.0"
