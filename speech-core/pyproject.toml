@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openclaw-speech-core"
+version = "0.1.0"
+description = "OpenClaw Voice Gateway - Speech Core Service"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+
+dependencies = [
+    "websockets>=12.0",
+    "numpy>=1.26",
+    "torch>=2.1",
+    "torchaudio>=2.1",
+    "faster-whisper>=1.0",
+    "piper-tts>=1.2",
+    "onnxruntime>=1.16",
+    "python-dotenv>=1.0",
+    "structlog>=24.1",
+    "aiohttp>=3.9",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "ctranslate2>=4.0",
+]
+elevenlabs = [
+    "elevenlabs>=1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.3",
+    "mypy>=1.8",
+]
+
+[project.scripts]
+speech-core = "speech_core.server:main"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
