@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/discord-voice-plugin",
+  "name": "@openclaw/discord-voice",
   "version": "0.1.0",
   "description": "OpenClaw Gateway plugin - Discord voice channel integration for real-time voice conversations",
   "main": "dist/index.js",
@@ -14,7 +14,7 @@
   "openclaw": {
     "extensions": ["./dist/index.js"],
     "install": {
-      "npmSpec": "@openclaw/discord-voice-plugin",
+      "npmSpec": "@openclaw/discord-voice",
       "defaultChoice": "npm"
     }
   },

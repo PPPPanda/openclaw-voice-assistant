@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/speech-core-plugin",
+  "name": "@openclaw/speech-core",
   "version": "0.1.0",
   "description": "OpenClaw Gateway plugin - Speech Core RPC client for STT/TTS/VAD",
   "main": "dist/index.js",
@@ -14,7 +14,7 @@
   "openclaw": {
     "extensions": ["./dist/index.js"],
     "install": {
-      "npmSpec": "@openclaw/speech-core-plugin",
+      "npmSpec": "@openclaw/speech-core",
       "defaultChoice": "npm"
     }
   },
