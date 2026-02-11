@@ -41,7 +41,7 @@ class PiperTTSEngine(BaseTTSEngine):
         """加载 Piper 语音模型
 
         Args:
-            voice: 语音名称（如 'zh_CN-huayan-medium'）
+            voice: 语音名称（如 'zh_CN-huayan-medium'）或完整路径
         """
         if self._loaded and self._voice == voice:
             logger.info(f"Piper voice {voice} already loaded")
@@ -53,10 +53,30 @@ class PiperTTSEngine(BaseTTSEngine):
         loop = asyncio.get_event_loop()
 
         def _load():
+            import os
+            from pathlib import Path
             from piper import PiperVoice
 
-            # Piper 会自动下载模型
-            return PiperVoice.load(voice)
+            # 查找模型文件
+            model_path = voice
+            
+            # 如果不是完整路径，在标准目录中查找
+            if not os.path.exists(voice) and not os.path.exists(f"{voice}.onnx"):
+                search_dirs = [
+                    Path.home() / ".local/share/piper-voices",
+                    Path("/usr/share/piper-voices"),
+                    Path.cwd(),
+                ]
+                for search_dir in search_dirs:
+                    candidate = search_dir / f"{voice}.onnx"
+                    if candidate.exists():
+                        model_path = str(candidate)
+                        logger.info(f"Found model at: {model_path}")
+                        break
+                else:
+                    logger.warning(f"Model {voice} not found in standard paths, trying as-is")
+
+            return PiperVoice.load(model_path)
 
         try:
             self._piper = await loop.run_in_executor(None, _load)
@@ -90,20 +110,20 @@ class PiperTTSEngine(BaseTTSEngine):
         loop = asyncio.get_event_loop()
 
         def _synthesize():
-            wav_buffer = io.BytesIO()
-            with wave.open(wav_buffer, "wb") as wav_file:
-                self._piper.synthesize(
-                    text,
-                    wav_file,
-                    length_scale=1.0 / options.speed if options.speed > 0 else 1.0,
-                )
-            wav_buffer.seek(0)
-
-            # 读取 WAV 数据
-            with wave.open(wav_buffer, "rb") as wav_file:
-                sample_rate = wav_file.getframerate()
-                channels = wav_file.getnchannels()
-                pcm_data = wav_file.readframes(wav_file.getnframes())
+            from piper.config import SynthesisConfig
+            
+            # 创建合成配置
+            syn_config = SynthesisConfig(
+                length_scale=1.0 / options.speed if options.speed > 0 else 1.0,
+            )
+            
+            # synthesize 返回 AudioChunk 迭代器
+            audio_chunks = list(self._piper.synthesize(text, syn_config))
+            
+            # 合并所有音频数据（使用 audio_int16_bytes）
+            pcm_data = b"".join(chunk.audio_int16_bytes for chunk in audio_chunks)
+            sample_rate = self._piper.config.sample_rate
+            channels = 1  # Piper 输出单声道
 
             return pcm_data, sample_rate, channels
 
