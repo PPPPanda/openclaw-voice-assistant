@@ -1,6 +1,6 @@
 # OpenClaw Voice Gateway — TODO & 开发路线图
 
-> **最后更新**: 2026-02-11  
+> **最后更新**: 2026-02-17  
 > **目的**: 跟踪未完成功能，方便多人协作与后续开发  
 > **约定**: 每完成一项请将 `[ ]` 改为 `[x]` 并注明完成日期
 
@@ -10,10 +10,10 @@
 
 | 阶段 | 状态 | 完成度 |
 |------|------|--------|
-| Phase 0 — 语音留言验证 | **未开始** | 0% |
+| Phase 0 — 语音留言验证 | **脚本+适配器已完成，待集成测试** | ~60% |
 | Phase 1 — 半双工对讲 | **代码就绪，待集成测试** | ~70% |
-| Phase 2 — 插件化重构 | **架构完成，缺多用户会话** | ~80% |
-| Phase 3 — 全双工打断 | **BargeIn 控制器就绪，其余待做** | ~30% |
+| Phase 2 — 插件化重构 | **会话管理器已完成** | ~90% |
+| Phase 3 — 全双工打断 | **BargeIn + Chunker 已完成** | ~40% |
 
 ---
 
@@ -22,7 +22,7 @@
 > **目标**: 绕开 Discord 实时语音的复杂度，先验证 STT + OpenClaw 集成链路  
 > **预计**: 1-2 天
 
-- [ ] **P0-1**: 创建 VoiceMessage Adapter
+- [x] **P0-1** (✅ 2026-02-17): 创建 VoiceMessage Adapter
   - 监听 Discord 频道中的语音附件/语音留言消息
   - 自动下载音频文件并转换为 PCM
   - 调用 `speech.stt` 获取转写文本
@@ -33,17 +33,17 @@
   - 接收 LLM 回复并以文本形式发回 Discord 频道
   - 需要确认 OpenClaw Gateway 的 API 接口格式
 
-- [ ] **P0-3**: 本地 STT 环境验证脚本
+- [x] **P0-3** (✅ 2026-02-17): 本地 STT 环境验证脚本
   - 编写独立的 Python 脚本验证 faster-whisper 安装和推理
   - 测量不同模型(tiny/base/small)在目标机器上的延迟
   - 文件: `speech-core/scripts/benchmark_stt.py`
 
-- [ ] **P0-4**: 延迟基准测试工具
+- [x] **P0-4** (✅ 2026-02-17): 延迟基准测试工具
   - 创建端到端延迟测试脚本（STT + LLM + TTS 全链路）
   - 记录 P50/P95 数据作为后续优化基线
   - 文件: `speech-core/scripts/benchmark_e2e.py`
 
-- [ ] **P0-5**: 中英文 STT 准确率测试
+- [x] **P0-5** (✅ 2026-02-17): 中英文 STT 准确率测试
   - 准备中文和英文测试音频文件到 `speech-core/tests/fixtures/audio/`
   - 编写准确率评估脚本（与参考文本对比 WER/CER）
   - 文件: `speech-core/scripts/evaluate_accuracy.py`
@@ -94,7 +94,7 @@
 > **目标**: 正式对接 OpenClaw Gateway 插件体系，支持多用户  
 > **预计**: 2-3 周
 
-- [ ] **P2-1**: 多用户会话管理
+- [x] **P2-1** (✅ 2026-02-17): 多用户会话管理
   - 实现 `SessionManager` 类，按 `voiceChannelId + userId` 隔离会话
   - 每个用户独立的对话历史和状态机
   - Active Speaker 策略：同一时刻只处理一个活跃用户
@@ -133,7 +133,7 @@
   - 或集成 sherpa-onnx 的实时流式模型
   - 目标: 用户说话过程中即可开始处理
 
-- [ ] **P3-2**: LLM 输出流式 Chunker
+- [x] **P3-2** (✅ 2026-02-17): LLM 输出流式 Chunker
   - 将 LLM 的 streaming token 输出按句子粒度切分
   - 每凑齐一个完整句子立即送 TTS 合成
   - 减少首帧延迟（不等 LLM 全部输出完）
@@ -168,26 +168,21 @@
 
 ### 测试
 
-- [ ] **T-1**: 补充 VAD 单元测试
-  - 用合成音频测试 `SileroVAD.process_chunk()` 的状态转换
-  - 测试静音→说话→静音的完整序列
-  - 测试最大时长切断逻辑
+- [x] **T-1** (✅ 2026-02-17): 补充 VAD 单元测试
+  - 用 MockSileroVAD 测试状态转换、边界条件、最大时长切断
+  - 文件: `speech-core/tests/test_vad.py`
 
-- [ ] **T-2**: 补充 SegmentBuffer 测试
-  - 测试前导缓冲（pre-buffer）功能
-  - 测试正常分段流程
-  - 测试重置逻辑
+- [x] **T-2** (✅ 2026-02-17): 补充 SegmentBuffer 测试
+  - 测试前导缓冲、分段流程、属性、重置、边界情况
+  - 文件: `speech-core/tests/test_segment.py`
 
-- [ ] **T-3**: 补充 SpeechPipeline 集成测试
-  - 使用 Mock STT/TTS 引擎测试完整流水线
-  - 测试状态机转换 IDLE→LISTENING→PROCESSING→SPEAKING→IDLE
-  - 测试打断场景
+- [x] **T-3** (✅ 2026-02-17): 补充 SpeechPipeline 集成测试
+  - Mock STT/TTS 引擎，测试状态机、回调、speak、打断
+  - 文件: `speech-core/tests/test_speech_pipeline.py`
 
-- [ ] **T-4**: WebSocket RPC 服务器测试
-  - 使用 websockets 客户端的自动化测试
-  - 测试 JSON-RPC 请求/响应格式
-  - 测试错误处理（无效请求、方法不存在等）
-  - 测试并发请求
+- [x] **T-4** (✅ 2026-02-17): WebSocket RPC 服务器测试
+  - JSON-RPC 2.0 协议、方法路由、错误处理（25 tests）
+  - 文件: `speech-core/tests/test_rpc.py`
 
 - [ ] **T-5**: TypeScript 插件测试
   - 为 `SpeechCoreClient` 编写单元测试（Mock WebSocket）
@@ -200,16 +195,14 @@
 
 ### DevOps
 
-- [ ] **D-1**: CI/CD 流水线
-  - GitHub Actions / GitLab CI 配置
-  - Python: lint (ruff) + type check (mypy) + test (pytest)
-  - TypeScript: lint (eslint) + build (tsc) + test
-  - Docker 镜像构建
+- [x] **D-1** (✅ 2026-02-17): CI/CD 流水线
+  - GitHub Actions: Python lint(ruff) + typecheck(mypy) + test(pytest) + TS lint + build
+  - Matrix: Python 3.11/3.12
+  - 文件: `.github/workflows/ci.yml`
 
-- [ ] **D-2**: Dockerfile 完善
-  - 多阶段构建减小镜像体积
-  - GPU 版本 Dockerfile（CUDA base image）
-  - 健康检查端点（HTTP /health）
+- [x] **D-2** (✅ 2026-02-17): Dockerfile 完善
+  - 多阶段构建、非 root 用户、健康检查
+  - GPU 版本：`speech-core/Dockerfile.gpu`（CUDA 12.2）
 
 - [ ] **D-3**: 监控与可观测性
   - 添加 Prometheus 指标导出（延迟、请求数、错误率）
