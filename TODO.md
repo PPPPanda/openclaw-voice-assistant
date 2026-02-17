@@ -28,10 +28,12 @@
   - 调用 `speech.stt` 获取转写文本
   - 文件: `gateway-plugins/discord-voice/src/voiceMessageAdapter.ts`
 
-- [ ] **P0-2**: OpenClaw Gateway 对接
-  - 实现将 STT 转写文本发送给 OpenClaw Gateway 的逻辑
-  - 接收 LLM 回复并以文本形式发回 Discord 频道
-  - 需要确认 OpenClaw Gateway 的 API 接口格式
+- [x] **P0-2** (✅ 2026-02-17): OpenClaw Gateway 对接
+  - 使用 `/hooks/agent` Webhook API 发送转写文本
+  - 自动投递 LLM 回复到 Discord 频道（`deliver: true, channel: "discord"`）
+  - 配置文档：`docs/gateway-hooks-setup.md`
+  - 验证脚本：`scripts/test_gateway_dispatch.ts`
+  - 前置条件：在 `openclaw.json` 中启用 `hooks.enabled: true`
 
 - [x] **P0-3** (✅ 2026-02-17): 本地 STT 环境验证脚本
   - 编写独立的 Python 脚本验证 faster-whisper 安装和推理

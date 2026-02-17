@@ -31,6 +31,12 @@ export interface VoiceMessageAdapterConfig {
   channelIds?: string[];
   /** 是否启用语音消息监听 */
   enabled?: boolean;
+  /** OpenClaw Gateway 端点 (e.g. http://localhost:18790) */
+  gatewayEndpoint?: string;
+  /** OpenClaw Hooks 认证 Token */
+  gatewayHooksToken?: string;
+  /** 是否自动将转写文本发送给 OpenClaw 处理 (默认 true) */
+  autoDispatch?: boolean;
 }
 
 export interface TranscriptionResult {
@@ -243,6 +249,11 @@ export class VoiceMessageAdapter {
         await this.onTranscription(transcriptionResult);
       }
 
+      // 自动派发到 OpenClaw Gateway
+      if (this.config.autoDispatch !== false) {
+        await this.dispatchToGateway(transcriptionResult, message);
+      }
+
       // 清理临时文件
       this.cleanupTempFiles([audioPath]);
     } catch (error) {
@@ -314,6 +325,82 @@ export class VoiceMessageAdapter {
           this.logger.warn(`[VoiceMessage] Failed to cleanup temp file ${path}: ${e}`);
         }
       }
+    }
+  }
+
+  // ==========================================================================
+  // OpenClaw Gateway 对接 (P0-2)
+  // ==========================================================================
+
+  /**
+   * 将转写文本派发到 OpenClaw Gateway
+   *
+   * 使用 /hooks/agent 端点：
+   * - 创建一个隔离的 agent session 处理语音输入
+   * - 自动将 LLM 回复投递回 Discord 频道
+   */
+  private async dispatchToGateway(
+    transcription: TranscriptionResult,
+    originalMessage: Message,
+  ): Promise<void> {
+    const endpoint = this.config.gatewayEndpoint;
+    const token = this.config.gatewayHooksToken;
+
+    if (!endpoint || !token) {
+      this.logger.debug(
+        '[VoiceMessage] Gateway dispatch skipped: gatewayEndpoint or gatewayHooksToken not configured',
+      );
+      return;
+    }
+
+    // 跳过空转写或低置信度结果
+    if (!transcription.text.trim()) {
+      this.logger.debug('[VoiceMessage] Gateway dispatch skipped: empty transcription');
+      return;
+    }
+
+    if (transcription.confidence < 0.3) {
+      this.logger.warn(
+        `[VoiceMessage] Gateway dispatch skipped: low confidence ${transcription.confidence.toFixed(2)}`,
+      );
+      return;
+    }
+
+    const senderTag = originalMessage.author.tag ?? originalMessage.author.id;
+    const hookPayload = {
+      message: `[🎤 Voice from ${senderTag}] ${transcription.text}`,
+      name: 'VoiceMessage',
+      deliver: true,
+      channel: 'discord',
+      to: transcription.channelId,
+      sessionKey: `hook:voice:${transcription.channelId}`,
+    };
+
+    this.logger.info(
+      `[VoiceMessage] Dispatching to Gateway: "${transcription.text.slice(0, 60)}..."`,
+    );
+
+    try {
+      const response = await fetch(`${endpoint}/hooks/agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(hookPayload),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`Gateway responded ${response.status}: ${body.slice(0, 200)}`);
+      }
+
+      this.logger.info(
+        `[VoiceMessage] Gateway dispatch accepted (${response.status})`,
+      );
+    } catch (error) {
+      this.logger.error(`[VoiceMessage] Gateway dispatch failed: ${error}`);
+      // 不抛出 — dispatch 失败不应阻断转写流程
     }
   }
 
