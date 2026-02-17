@@ -20,6 +20,10 @@ import { createAudioResourceFromPCM } from './player';
 export { DiscordVoiceAdapter } from './adapter';
 export { OpusToPCMStream, createPCMStream, collectPCMBuffer } from './receiver';
 export { PCMToOpusStream, createAudioResourceFromPCM, createAudioResourceFromOpus } from './player';
+export { VoicePipeline } from './pipeline';
+export { LLMClient } from './llm';
+export type { VoicePipelineConfig, PipelineMetrics } from './pipeline';
+export type { LLMConfig, LLMResponse } from './llm';
 
 // ============================================================================
 // 类型定义
