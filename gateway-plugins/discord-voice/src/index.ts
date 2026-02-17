@@ -16,6 +16,8 @@ import { Readable } from 'stream';
 import { DiscordVoiceAdapter } from './adapter';
 import { createPCMStream, collectPCMBuffer } from './receiver';
 import { createAudioResourceFromPCM } from './player';
+import { LLMClient } from './llm';
+import type { LLMConfig } from './llm';
 
 export { DiscordVoiceAdapter } from './adapter';
 export { OpusToPCMStream, createPCMStream, collectPCMBuffer } from './receiver';
@@ -42,6 +44,33 @@ export interface DiscordVoicePluginConfig {
   ttsProvider?: 'piper' | 'elevenlabs' | 'openai';
   /** STT 语言 */
   sttLanguage?: string;
+
+  // ── P1-1: LLM 集成配置 ───────────────────────────────────────────────
+
+  /**
+   * 响应模式：
+   * - 'llm-direct': 转写文本直接发送给 LLM API，TTS 播放回复（独立运行）
+   * - 'gateway-hooks': 转写文本发送给 OpenClaw Gateway /hooks/agent（集成模式）
+   * - 'callback-only': 仅触发 onTranscription 回调，不自动响应
+   * 默认: 'callback-only'
+   */
+  responseMode?: 'llm-direct' | 'gateway-hooks' | 'callback-only';
+
+  /** LLM API 端点 (e.g. https://api.openai.com/v1) — responseMode='llm-direct' 时必填 */
+  llmApiEndpoint?: string;
+  /** LLM API Key — responseMode='llm-direct' 时必填 */
+  llmApiKey?: string;
+  /** LLM 模型名称 (e.g. gpt-4o-mini) */
+  llmModel?: string;
+  /** LLM 系统提示词 */
+  llmSystemPrompt?: string;
+  /** LLM 最大回复 token */
+  llmMaxTokens?: number;
+
+  /** OpenClaw Gateway 端点 — responseMode='gateway-hooks' 时必填 */
+  gatewayEndpoint?: string;
+  /** OpenClaw Hooks 认证 Token — responseMode='gateway-hooks' 时必填 */
+  gatewayHooksToken?: string;
 }
 
 // Speech Core 插件的简化类型（避免循环依赖）
@@ -591,19 +620,116 @@ export default function register(api: PluginAPI): void {
       if (!globalPlugin) return;
 
       // 动态创建 Speech Core 客户端
-      // 使用简化的 WebSocket 客户端直接连接 Speech Core 服务
       const speechCoreEndpoint = pluginConfig.speechCoreEndpoint ?? 'ws://localhost:9001/speech';
-      
-      // 创建一个简化的 Speech Core 客户端
       const speechCore = createSpeechCoreClient(speechCoreEndpoint, api.logger);
       globalPlugin.setSpeechCore(speechCore);
 
-      // 设置转写回调（这里需要与 OpenClaw 的消息处理集成）
-      globalPlugin.onTranscription = async (text, userId, channelId) => {
-        api.logger.info(`[Voice] User ${userId} in ${channelId}: "${text}"`);
-        // TODO: 将文本发送给 OpenClaw 的消息处理系统
-        // 这部分需要与 OpenClaw Gateway 的消息路由集成
-      };
+      // ── 根据 responseMode 配置转写回调 ────────────────────────────────
+      const responseMode = pluginConfig.responseMode ?? 'callback-only';
+
+      if (responseMode === 'llm-direct') {
+        // ── Mode: LLM Direct ─────────────────────────────────────────
+        // STT 转写 → LLM API → TTS 播放
+        if (!pluginConfig.llmApiKey || !pluginConfig.llmApiEndpoint) {
+          api.logger.error(
+            '[Voice] responseMode=llm-direct requires llmApiEndpoint and llmApiKey',
+          );
+          return;
+        }
+
+        const llmClient = new LLMClient({
+          apiEndpoint: pluginConfig.llmApiEndpoint,
+          apiKey: pluginConfig.llmApiKey,
+          model: pluginConfig.llmModel ?? 'gpt-4o-mini',
+          systemPrompt: pluginConfig.llmSystemPrompt,
+          maxTokens: pluginConfig.llmMaxTokens ?? 256,
+          temperature: 0.7,
+          timeoutMs: 15000,
+        });
+
+        globalPlugin.onTranscription = async (text, userId, channelId) => {
+          api.logger.info(`[Voice] 🎙️ User ${userId}: "${text}"`);
+
+          try {
+            // LLM 对话
+            const sessionId = `${channelId}:${userId}`;
+            const llmStart = Date.now();
+            const response = await llmClient.chat(text, sessionId);
+            const llmMs = Date.now() - llmStart;
+
+            api.logger.info(
+              `[Voice] 🤖 LLM (${llmMs}ms): "${response.text.slice(0, 80)}${response.text.length > 80 ? '...' : ''}"`,
+            );
+
+            if (response.text.trim()) {
+              // TTS 播放回复
+              await globalPlugin!.speak(channelId, response.text);
+              api.logger.info('[Voice] 🔈 Response spoken');
+            }
+          } catch (error) {
+            api.logger.error(`[Voice] ❌ LLM/TTS error: ${error}`);
+          }
+        };
+
+        api.logger.info('[Voice] Response mode: llm-direct');
+
+      } else if (responseMode === 'gateway-hooks') {
+        // ── Mode: Gateway Hooks ──────────────────────────────────────
+        // STT 转写 → POST /hooks/agent → Gateway 处理 → 文本频道回复
+        const gwEndpoint = pluginConfig.gatewayEndpoint;
+        const gwToken = pluginConfig.gatewayHooksToken;
+
+        if (!gwEndpoint || !gwToken) {
+          api.logger.error(
+            '[Voice] responseMode=gateway-hooks requires gatewayEndpoint and gatewayHooksToken',
+          );
+          return;
+        }
+
+        globalPlugin.onTranscription = async (text, userId, channelId) => {
+          api.logger.info(`[Voice] 🎙️ User ${userId}: "${text}"`);
+
+          try {
+            const hookPayload = {
+              message: `[🎤 Voice from ${userId}] ${text}`,
+              name: 'DiscordVoice',
+              deliver: true,
+              channel: 'discord',
+              to: channelId,
+              sessionKey: `hook:voice:${channelId}`,
+            };
+
+            const response = await fetch(`${gwEndpoint}/hooks/agent`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${gwToken}`,
+              },
+              body: JSON.stringify(hookPayload),
+            });
+
+            if (!response.ok) {
+              const body = await response.text().catch(() => '');
+              api.logger.error(`[Voice] Gateway dispatch failed: ${response.status} ${body.slice(0, 200)}`);
+            } else {
+              api.logger.info(`[Voice] ✅ Dispatched to Gateway`);
+            }
+          } catch (error) {
+            api.logger.error(`[Voice] ❌ Gateway dispatch error: ${error}`);
+          }
+        };
+
+        api.logger.info('[Voice] Response mode: gateway-hooks');
+
+      } else {
+        // ── Mode: Callback Only ──────────────────────────────────────
+        // 仅日志，不自动响应（外部可通过 onTranscription 覆盖）
+        globalPlugin.onTranscription = async (text, userId, channelId) => {
+          api.logger.info(`[Voice] 🎙️ User ${userId} in ${channelId}: "${text}"`);
+        };
+
+        api.logger.info('[Voice] Response mode: callback-only (no auto-response)');
+      }
 
       await globalPlugin.initialize();
       api.logger.info('Discord Voice service started');
